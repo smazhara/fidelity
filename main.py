@@ -12,6 +12,7 @@ from watchdog.events import FileSystemEventHandler
 import ipdb
 import sqlite3
 from functools import lru_cache
+import re
 
 
 def conn():
@@ -19,30 +20,27 @@ def conn():
 
 
 def watch_for_accounts_history():
-    """
-    Watch ~/Downloads directory for Accounts_History.csv file
-    and call process_accounts_history() when it is created
-    """
-
-
     class MyHandler(FileSystemEventHandler):
         def on_created(self, event):
             ensure_sqlite_db()
 
-            if event.is_directory:
-                return  # Ignore directory creation events
+            file = event.src_path
 
-            new_file_path = event.src_path
-            if not new_file_path.endswith("Accounts_History.csv"):
-                return
+            # only process Accounts_History.csv
+            if event.is_directory \
+                    or not re.search(r"Accounts_History(\s\(\d+\))?\.csv$", file) \
+                    or event.event_type != 'created' \
+                    or not os.path.isfile(file):
+                    return
 
-            process_accounts_history(new_file_path)
+            process_accounts_history(file)
             print("Closed positions")
             print(closed_position_totals())
-            os.remove(new_file_path)
+            os.remove(file)
+
 
     folder_to_track = "/fidelity"
-    print(f"Watching {folder_to_track}...")
+    print(f"Waiting for Accounts_History.csv (all accounts). Simply download it.")
     event_handler = MyHandler()
     observer = Observer()
     observer.schedule(event_handler, folder_to_track, recursive=True)
@@ -63,7 +61,6 @@ def process_accounts_history(accounts_history_file_path):
 
 
 def cleanup_accounts_history(accounts_history_file_path):
-    print(f"Processing {accounts_history_file_path}")
 
     # read file into array of lines
     with open(accounts_history_file_path) as f:
